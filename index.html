@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Создай свою компанию</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: Arial, sans-serif; color: #fff; user-select: none; }
+#game { display: block; width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; }
+#hud { position: fixed; top: 15px; left: 15px; z-index: 10; }
+#money { background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; font-size: 18px; font-weight: bold; color: #4ade80; }
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(10,10,25,0.92); z-index: 20; padding: 20px; gap: 12px; overflow-y: auto; }
+.screen.hidden { display: none; }
+.screen h1, .screen h2 { font-size: 24px; margin-bottom: 10px; text-align: center; }
+.screen label { max-width: 500px; width: 100%; margin: 0 auto; font-size: 14px; color: #aaa; }
+.screen input, .screen textarea { max-width: 500px; width: 100%; margin: 0 auto; padding: 12px; border: 1px solid #444; border-radius: 10px; background: #222; color: #fff; font-size: 16px; font-family: inherit; }
+.screen textarea { min-height: 100px; resize: none; }
+button { max-width: 500px; width: 100%; margin: 0 auto; padding: 14px; border: none; border-radius: 10px; background: #4ade80; color: #000; font-size: 16px; font-weight: bold; cursor: pointer; }
+button:active { transform: scale(0.97); }
+.prolog-box { max-width: 600px; text-align: center; display: flex; flex-direction: column; gap: 20px; align-items: center; }
+#prolog-text { font-size: 20px; line-height: 1.5; min-height: 80px; }
+.phone { width: 320px; height: 560px; background: #fff; border-radius: 30px; border: 8px solid #333; overflow: hidden; display: flex; flex-direction: column; color: #000; }
+.phone-header { background: #3b82f6; color: #fff; padding: 15px; text-align: center; font-weight: bold; font-size: 16px; }
+.phone-body { padding: 20px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.phone-label { font-size: 14px; color: #666; }
+.phone textarea { background: #f0f0f0; color: #000; border: 1px solid #ddd; flex: 1; min-height: 200px; }
+.phone button { background: #3b82f6; color: #fff; }
+#result-text { max-width: 600px; width: 100%; background: #222; padding: 20px; border-radius: 10px; white-space: pre-wrap; font-family: inherit; font-size: 16px; line-height: 1.5; max-height: 60vh; overflow-y: auto; }
+#rotate-hint { display: none; position: fixed; inset: 0; background: #000; align-items: center; justify-content: center; font-size: 20px; text-align: center; padding: 20px; z-index: 999; }
+@media (orientation: portrait) { #rotate-hint { display: flex; } }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="money">$1 000 000</div>
+</div>
+
+<div id="screen-prolog" class="screen">
+  <div class="prolog-box">
+    <p id="prolog-text">Ты нашел пустой ничейный участок у своего дома...</p>
+    <button id="btn-prolog-next">Далее</button>
+  </div>
+</div>
+
+<div id="screen-create" class="screen hidden">
+  <h1>Создай свою компанию</h1>
+  <label>Название компании</label>
+  <input id="input-name" type="text" maxlength="30" placeholder="Например: FutureTech">
+  <label>Что делает ваша компания?</label>
+  <textarea id="input-desc" maxlength="200" placeholder="Например: делаем приложения для бизнеса"></textarea>
+  <button id="btn-create">Основать компанию</button>
+</div>
+
+<div id="screen-phone" class="screen hidden">
+  <div class="phone">
+    <div class="phone-header">Соцсеть</div>
+    <div class="phone-body">
+      <p class="phone-label">Напиши вакансию:</p>
+      <textarea id="input-vacancy" maxlength="300" placeholder="Ищу сотрудника в офис..."></textarea>
+      <button id="btn-post">Опубликовать</button>
+    </div>
+  </div>
+</div>
+
+<div id="screen-result" class="screen hidden">
+  <h2>Результат</h2>
+  <pre id="result-text"></pre>
+  <button id="btn-result-ok">Продолжить</button>
+</div>
+
+<div id="rotate-hint">Поверните телефон горизонтально 📱</div>
+
+<script>
+const state = { money: 1000000, companyName: '', companyDesc: '', vacancyText: '', employees: 0, incomePerSec: 0 };
+const prologTexts = [
+  "Ты возвращаешься домой и замечаешь пустой ничейный участок рядом.",
+  "На секунду задумываешься: а что если построить здесь свою компанию?",
+  "Ты решаешь — да. Пора начать бизнес."
+];
+let prologIndex = 0;
+
+const $ = (id) => document.getElementById(id);
+const screenProlog = $('screen-prolog');
+const screenCreate = $('screen-create');
+const screenPhone  = $('screen-phone');
+const screenResult = $('screen-result');
+const hud          = $('hud');
+const moneyEl      = $('money');
+
+function showScreen(screen) {
+  [screenProlog, screenCreate, screenPhone, screenResult].forEach(s => s.classList.add('hidden'));
+  if (screen) screen.classList.remove('hidden');
+}
+
+$('btn-prolog-next').addEventListener('click', () => {
+  prologIndex++;
+  if (prologIndex < prologTexts.length) {
+    $('prolog-text').textContent = prologTexts[prologIndex];
+  } else {
+    showScreen(screenCreate);
+  }
+});
+
+$('btn-create').addEventListener('click', () => {
+  const name = $('input-name').value.trim();
+  const desc = $('input-desc').value.trim();
+  if (!name || !desc) { alert('Заполни название и описание компании'); return; }
+  state.companyName = name;
+  state.companyDesc = desc;
+  showScreen(screenPhone);
+});
+
+$('btn-post').addEventListener('click', () => {
+  const vacancy = $('input-vacancy').value.trim();
+  if (!vacancy) { alert('Напиши текст вакансии'); return; }
+  state.vacancyText = vacancy;
+  const result = generateStubResult(vacancy);
+  $('result-text').textContent = result;
+  showScreen(screenResult);
+});
+
+$('btn-result-ok').addEventListener('click', () => {
+  showScreen(null);
+  hud.classList.remove('hidden');
+  state.employees = 1;
+  state.incomePerSec = 100;
+});
+
+function generateStubResult(vacancy) {
+  const len = vacancy.length;
+  if (len < 40) {
+    return "❌ На твою вакансию почти никто не откликнулся.\n\nСлишком короткое описание — люди не понимают, что их ждёт. Попробуй расписать условия подробнее.";
+  } else if (len < 100) {
+    return "✅ Пришёл 1 кандидат — Алексей.\n\nОн прочитал вакансию, согласился на условия 50/50 и готов начать работать.\n\nТеперь вы оба работаете. Доход: $100/сек.";
+  } else {
+    return "🔥 Пришло несколько кандидатов!\n\nТвой текст был подробным и понятным — люди заинтересовались. Алексей пришёл первым, согласился на условия 50/50.\n\nТеперь вы оба работаете. Доход: $100/сек.";
+  }
+}
+
+setInterval(() => {
+  if (state.incomePerSec > 0) {
+    state.money += state.incomePerSec;
+    moneyEl.textContent = '$' + state.money.toLocaleString('ru-RU');
+  }
+}, 1000);
+
+const canvas = $('game');
+const ctx = canvas.getContext('2d');
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+function drawScene() {
+  const w = canvas.width, h = canvas.height;
+  const sky = ctx.createLinearGradient(0, 0, 0, h * 0.7);
+  sky.addColorStop(0, '#87ceeb');
+  sky.addColorStop(1, '#e0f2fe');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#4caf50';
+  ctx.fillRect(0, h * 0.65, w, h * 0.35);
+  ctx.fillStyle = '#8b7355';
+  ctx.fillRect(w * 0.55, h * 0.68, w * 0.35, h * 0.15);
+  const houseX = w * 0.1, houseY = h * 0.45, houseW = w * 0.18, houseH = h * 0.22;
+  ctx.fillStyle = '#f5deb3';
+  ctx.fillRect(houseX, houseY, houseW, houseH);
+  ctx.fillStyle = '#8b0000';
+  ctx.beginPath();
+  ctx.moveTo(houseX - 10, houseY);
+  ctx.lineTo(houseX + houseW / 2, houseY - 40);
+  ctx.lineTo(houseX + houseW + 10, houseY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#5c3d1e';
+  ctx.fillRect(houseX + houseW * 0.4, houseY + houseH * 0.5, houseW * 0.2, houseH * 0.5);
+  ctx.fillStyle = '#a0d8f0';
+  ctx.fillRect(houseX + houseW * 0.1, houseY + houseH * 0.2, houseW * 0.2, houseH * 0.25);
+  if (state.companyName) {
+    const officeX = w * 0.6, officeY = h * 0.45, officeW = w * 0.22, officeH = h * 0.25;
+    ctx.fillStyle = '#d0d0d0';
+    ctx.fillRect(officeX, officeY, officeW, officeH);
+    ctx.fillStyle = '#607d8b';
+    ctx.fillRect(officeX - 5, officeY - 10, officeW + 10, 15);
+    ctx.fillStyle = '#87ceeb';
+    for (let i = 0; i < 3; i++) ctx.fillRect(officeX + 15 + i * 40, officeY + 20, 25, 25);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(state.companyName, officeX + officeW / 2, officeY - 25);
+  }
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.arc(w * 0.85, h * 0.15, 40, 0, Math.PI * 2);
+  ctx.fill();
+  requestAnimationFrame(drawScene);
+}
+drawScene();
+
+showScreen(screenProlog);
+</script>
+
+</body>
+  </html>
